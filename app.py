@@ -1,14 +1,45 @@
+class Load():
+    # This is where we define the work?
+
+    def __init__(self,payload):
+        self.payload=payload
+
+
+
 class Controller():
-    def __init__(self,nProcessors=10):
+    def __init__(self,nProcessors=10,load=None):
         self.nProcessors = nProcessors
-        # self.allWorkers = set()
+
+        self.incomingWork=load.payload
         self.badWorkers = set()
         self.freeWorkers = set()
         self.busyWorkers = set()
+        self.bundles=[]
 
         # Start one Leader, rest are workers
         self.leader= Processor(0)
         self.freeWorkers = { Processor(x,isLeader=False) for x in range(1,self.nProcessors)}
+
+    def splitWork(self):
+        '''
+            Split the work based on no of workers.. exclude leader
+            and get your bundles
+        '''
+        if not self.incomingWork:
+            raise Exception("Empty load")
+
+        def _split(w,n):
+            if w==[]:
+                return w
+            else:
+                self.bundles.append(w[:n])
+                return _split(w[n:],n)
+
+        _split(self.incomingWork,self.nProcessors-1)
+
+        return self.bundles
+        
+    
 
     def getInventory(self):
         return (self.badWorkers,self.freeWorkers,self.busyWorkers)
@@ -68,7 +99,9 @@ class Processor():
    
 def main():
     print("Hello")
-    system=Controller(4)
+    work=Load([i for i in range(17)])
+    system=Controller(5,work)
+    print(system.splitWork())
 
 if __name__ == "__main__":
     main()
