@@ -19,6 +19,7 @@ class Controller():
         # Start one Leader, rest are workers
         self.leader= Processor(0)
         self.freeWorkers = { Processor(x,isLeader=False) for x in range(1,self.nProcessors)}
+        self.splitWork()
 
     def splitWork(self):
         '''
@@ -35,9 +36,9 @@ class Controller():
                 self.bundles.append(w[:n])
                 return _split(w[n:],n)
 
-        _split(self.incomingWork,self.nProcessors-1)
+        self.bundles=_split(self.incomingWork,self.nProcessors-1)
 
-        return self.bundles
+        
         
     
 
@@ -101,7 +102,8 @@ def main():
     print("Hello")
     work=Load([i for i in range(17)])
     system=Controller(5,work)
-    print(system.splitWork())
+    # print(system.splitWork())
+    print(system.bundles)
 
 if __name__ == "__main__":
     main()
