@@ -20,6 +20,7 @@ class Controller():
         self.leader= Processor(0)
         self.freeWorkers = { Processor(x,isLeader=False) for x in range(1,self.nProcessors)}
         self.splitWork()
+        # TODO: allocate work
 
     def splitWork(self):
         '''
@@ -36,11 +37,7 @@ class Controller():
                 self.bundles.append(w[:n])
                 return _split(w[n:],n)
 
-        self.bundles=_split(self.incomingWork,self.nProcessors-1)
-
-        
-        
-    
+        _split(self.incomingWork,self.nProcessors-1)
 
     def getInventory(self):
         return (self.badWorkers,self.freeWorkers,self.busyWorkers)
@@ -102,7 +99,6 @@ def main():
     print("Hello")
     work=Load([i for i in range(17)])
     system=Controller(5,work)
-    # print(system.splitWork())
     print(system.bundles)
 
 if __name__ == "__main__":
