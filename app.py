@@ -1,3 +1,5 @@
+import threading
+
 
 class Load():
     # This is where we define the work?
@@ -17,11 +19,12 @@ class Cluster():
         self.freeWorkers = set()
         self.busyWorkers = set()
         self.bundles = []
+        self.bundleResult = []
         self.maxPerWorker = maxPerWorker
 
         # Start one Leader, rest are workers
         self.leader = Processor(0)
-        self.freeWorkers = {Processor(x, isLeader=False) for x in range(1, self.nProcessors)}
+        self.freeWorkers = {Processor(x, isLeader=False, buffer=self.bundleResult) for x in range(1, self.nProcessors)}
         self.splitWork()
 
         # Main work aka process
@@ -64,12 +67,18 @@ class Cluster():
             x = self.fetchNextAvailable()
             self.addToBusy(x)
             x.assignTask(self.incomingCompute)
-            resFromWorker = x.assignLoadAndRun(y)
-            print(f"{x.name} returned {resFromWorker}")
+            x.assignLoadAndRun(y)
             self.addToFree(x)
-            return resFromWorker
 
-        return list(map(_assignTaskAndLoad, self.bundles))
+        # return list(map(_assignTaskAndLoad, self.bundles))
+        print(f"Total Chunks - {len(self.bundles)}")
+        
+        # map
+        list(map(_assignTaskAndLoad, self.bundles))
+        
+        # reduce
+        # apply the compute func to collected results
+        return self.incomingCompute(list(map(lambda x: x, self.bundleResult)))
 
     def getInventory(self):
         return (self.badWorkers, self.freeWorkers, self.busyWorkers)
@@ -101,7 +110,7 @@ class Cluster():
 
 
 class Processor():
-    def __init__(self, id, name=None, isLeader=True):
+    def __init__(self, id, name=None, isLeader=True, buffer=None):
         # sets
         self.id = id
         self.isLeader = isLeader
@@ -109,7 +118,7 @@ class Processor():
         self.setName()
         self.dead = False
         self.task = None
-
+        self.buffer = buffer
         self.info()
 
     def assignTask(self, task):
@@ -120,8 +129,12 @@ class Processor():
         if not self.task:
             raise Exception("Task not assigned")
 
-        out = self.task(self.payload)
-        return out
+        def cc(x, v):
+            self.buffer.append(x(v))
+
+        threading.Thread(target=cc, args=[self.task, self.payload], daemon=True).start()
+        # return out
+        # return 1
 
     def isDead(self):
         return self.dead
@@ -145,10 +158,14 @@ class Processor():
 
 def main():
     print("Hello")
+
     # Define the Work to be distributed here
-    mainLoad = Load([i for i in range(10)], compute=sum)
+    mainLoad = Load([i for i in range(1_000_000_000)], compute=sum)
+
     # Start the cluster with the payload definition and process
-    system = Cluster(3, mainLoad)
+    nProc=8
+    mxPerProc=100_000_000
+    system = Cluster(nProc, load=mainLoad,maxPerWorker=mxPerProc)
     clusterOut = system.distributeAndCollect()
     print(clusterOut)
 
