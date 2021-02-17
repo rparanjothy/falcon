@@ -4,57 +4,54 @@ import threading
 class Load():
     # This is where we define the work?
 
-    def __init__(self, payload, compute=max):
-        self.payload = payload
+    def __init__(self, payload, compute=max,maxPerWorker=10):
+        self.payload = self.toGen(payload)
         self.compute = compute
+        self.maxPerWorker=maxPerWorker
 
+    def toGen(self,payload):
+        """
+            make this a gen
+        """
+        o=()
+        for i in payload:
+            o+=(i,)
+            # print(2,len(o),len(a))
+            if ((len(o)==self.maxPerWorker) or (len(o)==len(payload))):
+                # print(1,len(o),len(a))
+                yield o
+                o=()
+        else: 
+            if len(o):
+                yield o    
+        
+   
 
 class Cluster():
-    def __init__(self, nProcessors=10, load=None, maxPerWorker=4):
+    def __init__(self, nProcessors=10, load=None):
         self.nProcessors = nProcessors
 
-        self.incomingPayload = load.payload
         self.incomingCompute = load.compute
         self.badWorkers = set()
         self.freeWorkers = set()
         self.busyWorkers = set()
-        self.bundles = []
+        self.bundles = load.payload #this will be gen
         self.bundleResult = []
-        self.maxPerWorker = maxPerWorker
 
         # Start one Leader, rest are workers
         self.leader = Processor(0)
         self.freeWorkers = {Processor(x, isLeader=False, buffer=self.bundleResult) for x in range(1, self.nProcessors)}
-        self.splitWork()
+        # Handled by gen
+        # self.splitWork()
 
         # Main work aka process
-        if self.bundles == []:
+        if not self.bundles:
+        # if self.bundles == []:
             raise Exception("Load not split")
 
         print("=" * 40)
         print(self.incomingCompute.__name__)
-        print(f"{self.maxPerWorker} items each")
         print("=" * 40)
-
-    def splitWork(self):
-        '''
-            Split the work based on no of workers.. exclude leader
-            and get your bundles
-        '''
-        if not self.incomingPayload:
-            raise Exception("Empty load")
-
-        def _split(w, n):
-            '''
-                n should be Len of payload/nProcessors
-            '''
-            if w == []:
-                return w
-            else:
-                self.bundles.append(w[:n])
-                return _split(w[n:], n)
-
-        _split(self.incomingPayload, self.maxPerWorker)
 
     def distributeAndCollect(self):
         '''
@@ -70,15 +67,21 @@ class Cluster():
             x.assignLoadAndRun(y)
             self.addToFree(x)
 
-        # return list(map(_assignTaskAndLoad, self.bundles))
-        print(f"Total Chunks - {len(self.bundles)}")
-        
         # map
-        list(map(_assignTaskAndLoad, self.bundles))
-        
+        # list(map(_assignTaskAndLoad, self.bundles))
+        # print(self.bundleResult)
+
+        for x in self.bundles:
+            # print(x)
+            _assignTaskAndLoad(x)
+        # print(self.bundleResult)
+
         # reduce
         # apply the compute func to collected results
-        return self.incomingCompute(list(map(lambda x: x, self.bundleResult)))
+        
+        # return self.incomingCompute(list(map(lambda x: x, self.bundleResult)))
+        return self.bundleResult
+        
 
     def getInventory(self):
         return (self.badWorkers, self.freeWorkers, self.busyWorkers)
@@ -159,13 +162,22 @@ class Processor():
 def main():
     print("Hello")
 
+    
+    
+    mxPerProc=50_000
     # Define the Work to be distributed here
-    mainLoad = Load([i for i in range(1_000_000_000)], compute=sum)
+    mainLoad = Load([i for i in range(1_000_000)], compute=sum,maxPerWorker=mxPerProc)
+    
+    # mainLoad = Load([1,2,3,4], compute=sum,maxPerWorker=mxPerProc)
+    # mainLoad = Load("abcdefghijklmnopqrstuvwxyz", compute=lambda x: str.upper("".join(x)),maxPerWorker=mxPerProc)
+
+    # with open("./app.py","r") as f:
+    #     mainLoad = Load(f.read(), compute=lambda x: str.upper("".join(x)),maxPerWorker=mxPerProc)
 
     # Start the cluster with the payload definition and process
     nProc=8
-    mxPerProc=100_000_000
-    system = Cluster(nProc, load=mainLoad,maxPerWorker=mxPerProc)
+ 
+    system = Cluster(nProc, load=mainLoad)
     clusterOut = system.distributeAndCollect()
     print(clusterOut)
 
