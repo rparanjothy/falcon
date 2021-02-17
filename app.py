@@ -1,52 +1,48 @@
 import threading
+import time
 
 
 class Load():
     # This is where we define the work?
 
-    def __init__(self, payload, compute=max,maxPerWorker=10):
+    def __init__(self, payload, compute=max, maxPerWorker=10):
         self.payload = self.toGen(payload)
         self.compute = compute
-        self.maxPerWorker=maxPerWorker
+        self.maxPerWorker = maxPerWorker
 
-    def toGen(self,payload):
+    def toGen(self, payload):
         """
             make this a gen
         """
-        o=()
+        o = ()
         for i in payload:
-            o+=(i,)
-            # print(2,len(o),len(a))
-            if ((len(o)==self.maxPerWorker) or (len(o)==len(payload))):
-                # print(1,len(o),len(a))
+            o += (i,)
+            if ((len(o) == self.maxPerWorker) or (len(o) == len(payload))):
                 yield o
-                o=()
-        else: 
+                o = ()
+        else:
             if len(o):
-                yield o    
-        
-   
+                yield o
+
 
 class Cluster():
     def __init__(self, nProcessors=10, load=None):
         self.nProcessors = nProcessors
-
         self.incomingCompute = load.compute
         self.badWorkers = set()
         self.freeWorkers = set()
         self.busyWorkers = set()
-        self.bundles = load.payload #this will be gen
+        self.bundles = load.payload  # this will be gen
         self.bundleResult = []
 
         # Start one Leader, rest are workers
-        self.leader = Processor(0)
-        self.freeWorkers = {Processor(x, isLeader=False, buffer=self.bundleResult) for x in range(1, self.nProcessors)}
-        # Handled by gen
-        # self.splitWork()
+        # self.leader = Processor(-1)
+        # This leader should keep tabs but for now he is also worker
+
+        self.freeWorkers = {Processor(x, isLeader=False, buffer=self.bundleResult) for x in range(0, self.nProcessors)}
 
         # Main work aka process
         if not self.bundles:
-        # if self.bundles == []:
             raise Exception("Load not split")
 
         print("=" * 40)
@@ -64,24 +60,24 @@ class Cluster():
             x = self.fetchNextAvailable()
             self.addToBusy(x)
             x.assignTask(self.incomingCompute)
-            x.assignLoadAndRun(y)
-            self.addToFree(x)
+
+            try:
+                x.assignLoadAndRun(y)
+                self.addToFree(x)
+            except Exception:
+                print("adding to bad")
+                self.addToBad(x)
 
         # map
-        # list(map(_assignTaskAndLoad, self.bundles))
-        # print(self.bundleResult)
-
+        # Avoid this list just loop
         for x in self.bundles:
-            # print(x)
             _assignTaskAndLoad(x)
-        # print(self.bundleResult)
 
         # reduce
         # apply the compute func to collected results
-        
+
         # return self.incomingCompute(list(map(lambda x: x, self.bundleResult)))
         return self.bundleResult
-        
 
     def getInventory(self):
         return (self.badWorkers, self.freeWorkers, self.busyWorkers)
@@ -133,11 +129,19 @@ class Processor():
             raise Exception("Task not assigned")
 
         def cc(x, v):
-            self.buffer.append(x(v))
+            try:
+                res = x(v)
+                self.buffer.append(res)
+                with open(f"./out/{self.name}.out", "a") as g:
+                    # g.write(",".join(map(lambda x: str(x), v)))
+                    g.write(f": {str(res)}")
+                    g.write("\n")
+                    # raise Exception("I am dead")
+            except Exception:
+                self.dead = True
+                print(self.name, "dead")
 
         threading.Thread(target=cc, args=[self.task, self.payload], daemon=True).start()
-        # return out
-        # return 1
 
     def isDead(self):
         return self.dead
@@ -162,12 +166,10 @@ class Processor():
 def main():
     print("Hello")
 
-    
-    
-    mxPerProc=50_000
+    mxPerProc = 10
     # Define the Work to be distributed here
-    mainLoad = Load([i for i in range(1_000_000)], compute=sum,maxPerWorker=mxPerProc)
-    
+    mainLoad = Load(range(100_000), compute=sum, maxPerWorker=mxPerProc)
+
     # mainLoad = Load([1,2,3,4], compute=sum,maxPerWorker=mxPerProc)
     # mainLoad = Load("abcdefghijklmnopqrstuvwxyz", compute=lambda x: str.upper("".join(x)),maxPerWorker=mxPerProc)
 
@@ -175,11 +177,12 @@ def main():
     #     mainLoad = Load(f.read(), compute=lambda x: str.upper("".join(x)),maxPerWorker=mxPerProc)
 
     # Start the cluster with the payload definition and process
-    nProc=8
- 
+    nProc = 5
+
     system = Cluster(nProc, load=mainLoad)
+    # system.status()
     clusterOut = system.distributeAndCollect()
-    print(clusterOut)
+    # print(clusterOut)
 
 
 if __name__ == "__main__":
