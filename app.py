@@ -129,19 +129,24 @@ class Processor():
             raise Exception("Task not assigned")
 
         def cc(x, v):
-            try:
+            try:            
+                
                 res = x(v)
                 self.buffer.append(res)
+
+                print(self.name,self.buffer,v,res)
                 with open(f"./out/{self.name}.out", "a") as g:
-                    # g.write(",".join(map(lambda x: str(x), v)))
-                    g.write(f": {str(res)}")
+                    g.write(f"{self.buffer}: {str(res)}: {v}")
                     g.write("\n")
                     # raise Exception("I am dead")
             except Exception:
                 self.dead = True
                 print(self.name, "dead")
 
-        threading.Thread(target=cc, args=[self.task, self.payload], daemon=True).start()
+        tx=threading.Thread(target=cc, args=[self.task, self.payload], daemon=True)
+        tx.start()
+        # Wait for all 
+        tx.join()
 
     def isDead(self):
         return self.dead
@@ -168,21 +173,21 @@ def main():
 
     mxPerProc = 10
     # Define the Work to be distributed here
-    mainLoad = Load(range(100_000), compute=sum, maxPerWorker=mxPerProc)
+    # mainLoad = Load(range(37), compute=sum, maxPerWorker=mxPerProc)
 
     # mainLoad = Load([1,2,3,4], compute=sum,maxPerWorker=mxPerProc)
-    # mainLoad = Load("abcdefghijklmnopqrstuvwxyz", compute=lambda x: str.upper("".join(x)),maxPerWorker=mxPerProc)
+    mainLoad = Load("abcdefghijklmnopqrstuvwxyz", compute=lambda x: str.upper("".join(x)),maxPerWorker=mxPerProc)
 
     # with open("./app.py","r") as f:
     #     mainLoad = Load(f.read(), compute=lambda x: str.upper("".join(x)),maxPerWorker=mxPerProc)
 
     # Start the cluster with the payload definition and process
-    nProc = 5
+    nProc = 2
 
     system = Cluster(nProc, load=mainLoad)
     # system.status()
     clusterOut = system.distributeAndCollect()
-    # print(clusterOut)
+    print(clusterOut)
 
 
 if __name__ == "__main__":
