@@ -1,6 +1,7 @@
 import threading
 import time
-from flask import Flask,jsonify
+from flask import Flask, jsonify
+
 
 class Load():
     # This is where we define the work?
@@ -50,8 +51,6 @@ class Cluster(Flask):
         print(self.incomingCompute.__name__)
         print("=" * 40)
 
-   
-
     def distributeAndCollect(self):
         '''
             We have the bundle, we have the computefn, we also have the free workers..
@@ -62,7 +61,7 @@ class Cluster(Flask):
 
             x = self.fetchNextAvailable()
             self.addToBusy(x)
-            
+
             x.assignTask(self.incomingCompute)
 
             try:
@@ -75,10 +74,9 @@ class Cluster(Flask):
         # map
         # Avoid this list just loop
         #  This is probably submittin serially
-        
+
         for x in self.bundles:
-            threading.Thread(target=_assignTaskAndLoad,args=[x],daemon=True).start()
-        
+            threading.Thread(target=_assignTaskAndLoad, args=[x], daemon=True).start()
 
         # reduce
         # apply the compute func to collected results
@@ -93,18 +91,15 @@ class Cluster(Flask):
         return self.freeWorkers
 
     def fetchNextAvailable(self):
-        # Chances are first set is still clocking.. 
+        # Chances are first set is still clocking..
         # so we need to wait until the first set of workers finish
 
         while not self.freeWorkers:
             print("waiting.. 2 sec")
             time.sleep(2)
-            
-        if len(self.freeWorkers)>0:
-            p=self.freeWorkers.pop() 
-            print(">>>","F",len(self.freeWorkers))
-            return p    
 
+        if len(self.freeWorkers) > 0:
+            return self.freeWorkers.pop()
 
     def addToFree(self, worker):
         # Take from Busy when done and then add to free
@@ -147,16 +142,16 @@ class Processor():
             raise Exception("Task not assigned")
 
         def cc(x, v):
-            try:            
-                
+            try:
+
                 res = x(v)
                 self.buffer.append(res)
 
-                print(self.name,self.buffer,v,res)
+                print(self.name, self.buffer, v, res)
                 # with open(f"./out/{self.name}.out", "a") as g:
                 #     g.write(f"{self.buffer}: {str(res)}: {v}")
                 #     g.write("\n")
-                    # raise Exception("I am dead")
+                # raise Exception("I am dead")
             except Exception:
                 self.dead = True
                 print(self.name, "dead")
@@ -187,9 +182,12 @@ class Processor():
 mxPerProc = 10
 
 # Define the Work to be distributed here
+
+
 def ccc(x):
     time.sleep(10)
     return sum(x)
+
 
 # mainLoad = Load(range(100_000), compute=sum, maxPerWorker=mxPerProc)
 mainLoad = Load(range(200), compute=ccc, maxPerWorker=mxPerProc)
@@ -202,9 +200,9 @@ system.distributeAndCollect()
 
 @system.route("/")
 def x():
-    return jsonify({"msg":"ok","buff":system.bundleResult,"status":[ {"bad": [i.name for i in system.getInventory()[0]]},{"free": [i.name for i in system.getInventory()[1]]},{"busy": [i.name for i in system.getInventory()[2]]}]})
-    
+    return jsonify({"msg": "ok", "buff": system.bundleResult, "status": [{"bad": [i.name for i in system.getInventory()[0]]}, {
+                   "free": [i.name for i in system.getInventory()[1]]}, {"busy": [i.name for i in system.getInventory()[2]]}]})
 
-if __name__ == "__main__":    
-    system.run("0.0.0.0",5000,debug=True)
-  
+
+if __name__ == "__main__":
+    system.run("0.0.0.0", 5000, debug=True)
