@@ -1,6 +1,6 @@
 import threading
 import time
-
+from flask import Flask,jsonify
 
 class Load():
     # This is where we define the work?
@@ -25,7 +25,7 @@ class Load():
                 yield o
 
 
-class Cluster():
+class Cluster(Flask):
     def __init__(self, nProcessors=10, load=None):
         self.nProcessors = nProcessors
         self.incomingCompute = load.compute
@@ -34,6 +34,7 @@ class Cluster():
         self.busyWorkers = set()
         self.bundles = load.payload  # this will be gen
         self.bundleResult = []
+        super().__init__(__name__)
 
         # Start one Leader, rest are workers
         # self.leader = Processor(-1)
@@ -49,6 +50,8 @@ class Cluster():
         print(self.incomingCompute.__name__)
         print("=" * 40)
 
+   
+
     def distributeAndCollect(self):
         '''
             We have the bundle, we have the computefn, we also have the free workers..
@@ -59,6 +62,7 @@ class Cluster():
 
             x = self.fetchNextAvailable()
             self.addToBusy(x)
+            
             x.assignTask(self.incomingCompute)
 
             try:
@@ -70,8 +74,11 @@ class Cluster():
 
         # map
         # Avoid this list just loop
+        #  This is probably submittin serially
+        
         for x in self.bundles:
-            _assignTaskAndLoad(x)
+            threading.Thread(target=_assignTaskAndLoad,args=[x],daemon=True).start()
+        
 
         # reduce
         # apply the compute func to collected results
@@ -86,7 +93,18 @@ class Cluster():
         return self.freeWorkers
 
     def fetchNextAvailable(self):
-        return self.freeWorkers.pop()
+        # Chances are first set is still clocking.. 
+        # so we need to wait until the first set of workers finish
+
+        while not self.freeWorkers:
+            print("waiting.. 2 sec")
+            time.sleep(2)
+            
+        if len(self.freeWorkers)>0:
+            p=self.freeWorkers.pop() 
+            print(">>>","F",len(self.freeWorkers))
+            return p    
+
 
     def addToFree(self, worker):
         # Take from Busy when done and then add to free
@@ -135,18 +153,15 @@ class Processor():
                 self.buffer.append(res)
 
                 print(self.name,self.buffer,v,res)
-                with open(f"./out/{self.name}.out", "a") as g:
-                    g.write(f"{self.buffer}: {str(res)}: {v}")
-                    g.write("\n")
+                # with open(f"./out/{self.name}.out", "a") as g:
+                #     g.write(f"{self.buffer}: {str(res)}: {v}")
+                #     g.write("\n")
                     # raise Exception("I am dead")
             except Exception:
                 self.dead = True
                 print(self.name, "dead")
 
-        tx=threading.Thread(target=cc, args=[self.task, self.payload], daemon=True)
-        tx.start()
-        # Wait for all 
-        tx.join()
+        cc(self.task, self.payload)
 
     def isDead(self):
         return self.dead
@@ -168,27 +183,28 @@ class Processor():
         self.setName()
 
 
-def main():
-    print("Hello")
+# ----------
+mxPerProc = 10
 
-    mxPerProc = 10
-    # Define the Work to be distributed here
-    # mainLoad = Load(range(37), compute=sum, maxPerWorker=mxPerProc)
+# Define the Work to be distributed here
+def ccc(x):
+    time.sleep(10)
+    return sum(x)
 
-    # mainLoad = Load([1,2,3,4], compute=sum,maxPerWorker=mxPerProc)
-    mainLoad = Load("abcdefghijklmnopqrstuvwxyz", compute=lambda x: str.upper("".join(x)),maxPerWorker=mxPerProc)
+# mainLoad = Load(range(100_000), compute=sum, maxPerWorker=mxPerProc)
+mainLoad = Load(range(200), compute=ccc, maxPerWorker=mxPerProc)
 
-    # with open("./app.py","r") as f:
-    #     mainLoad = Load(f.read(), compute=lambda x: str.upper("".join(x)),maxPerWorker=mxPerProc)
-
-    # Start the cluster with the payload definition and process
-    nProc = 2
-
-    system = Cluster(nProc, load=mainLoad)
-    # system.status()
-    clusterOut = system.distributeAndCollect()
-    print(clusterOut)
+# Start the cluster with the payload definition and process
+nProc = 4
+system = Cluster(nProc, load=mainLoad)
+system.distributeAndCollect()
 
 
-if __name__ == "__main__":
-    main()
+@system.route("/")
+def x():
+    return jsonify({"msg":"ok","buff":system.bundleResult,"status":[ {"bad": [i.name for i in system.getInventory()[0]]},{"free": [i.name for i in system.getInventory()[1]]},{"busy": [i.name for i in system.getInventory()[2]]}]})
+    
+
+if __name__ == "__main__":    
+    system.run("0.0.0.0",5000,debug=True)
+  
