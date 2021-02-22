@@ -1,7 +1,8 @@
 import threading
 import time
 from flask import Flask, jsonify
-
+from bs4 import BeautifulSoup
+import requests
 
 class Load():
     # This is where we define the work?
@@ -145,16 +146,19 @@ class Processor():
             try:
 
                 res = x(v)
-                self.buffer.append(res)
+                self.buffer.extend(res)
 
-                print(self.name, self.buffer, v, res)
-                # with open(f"./out/{self.name}.out", "a") as g:
-                #     g.write(f"{self.buffer}: {str(res)}: {v}")
-                #     g.write("\n")
+                # print(self.name, self.buffer, v, res)
+                with open(f"./out/{self.name}.out", "a") as g:
+                    # g.write(f"{self.buffer}: {str(res)}: {v}")
+                    for l in res:
+                        g.write(f"{l}\n")
+                    
                 # raise Exception("I am dead")
-            except Exception:
+            except Exception as e:
                 self.dead = True
                 print(self.name, "dead")
+                print(e)
 
         cc(self.task, self.payload)
 
@@ -179,28 +183,32 @@ class Processor():
 
 
 # ----------
-mxPerProc = 10
+mxPerProc = 1
 
 # Define the Work to be distributed here
 
 
 def ccc(x):
-    time.sleep(10)
-    return sum(x)
+    o=[]
+    for u in x:
+        time.sleep(.3)
+        res=requests.get(u,headers={"User-Agent":"X"})
+        s=BeautifulSoup(res.text,"html5lib")
+        o.extend(list(map(lambda x:",".join(x.text.split("/")[-2:]),s.find_all("loc"))))
+    return o    
 
 
-# mainLoad = Load(range(100_000), compute=sum, maxPerWorker=mxPerProc)
-mainLoad = Load(range(200), compute=ccc, maxPerWorker=mxPerProc)
+mainLoad = Load([f"https://www.homedepot.com/sitemap/d/pip/detail{x}.xml" for x in range(8)], compute=ccc, maxPerWorker=mxPerProc)
 
 # Start the cluster with the payload definition and process
-nProc = 4
+nProc = 8
 system = Cluster(nProc, load=mainLoad)
 system.distributeAndCollect()
 
 
 @system.route("/")
 def x():
-    return jsonify({"msg": "ok", "buff": system.bundleResult, "status": [{"bad": [i.name for i in system.getInventory()[0]]}, {
+    return jsonify({"msg": "ok", "buff": len(system.bundleResult), "status": [{"bad": [i.name for i in system.getInventory()[0]]}, {
                    "free": [i.name for i in system.getInventory()[1]]}, {"busy": [i.name for i in system.getInventory()[2]]}]})
 
 
